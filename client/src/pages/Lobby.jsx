@@ -3,29 +3,58 @@ import { useAuth } from '../AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { LogOut, Plus, Users, Play } from 'lucide-react';
+import io from 'socket.io-client';
+
+// We need a persistent socket connection for the lobby
+let socket;
 
 const Lobby = () => {
-    const { user, logout } = useAuth();
+    const { user, token, logout } = useAuth();
     const navigate = useNavigate();
     const [matches, setMatches] = useState([]);
-    const [showCreateModal, setShowCreateModal] = useState(false);
 
-    // Mock data for now (Phase 2 will implement real fetching)
     useEffect(() => {
-        setMatches([
-            { id: '1', name: 'Alpha Squad War', players: 4, maxPlayers: 10, status: 'WAITING' },
-            { id: '2', name: 'Midnight Raid', players: 8, maxPlayers: 10, status: 'IN_PROGRESS' },
-        ]);
-    }, []);
+        // Initialize socket with Auth Token
+        socket = io('http://localhost:3000', {
+            auth: { token }
+        });
+
+        socket.on('connect', () => {
+            console.log('Connected to Lobby Socket');
+            socket.emit('join_lobby');
+        });
+
+        socket.on('lobby_update', (activeMatches) => {
+            setMatches(activeMatches);
+        });
+
+        return () => {
+            socket.disconnect();
+        };
+    }, [token]);
 
     const handleLogout = () => {
         logout();
         navigate('/');
     };
 
+    const createMatch = () => {
+        const matchName = `${user.username}'s War`;
+        socket.emit('create_match', { name: matchName, config: { maxPlayers: 10 } }, (response) => {
+            if (response.success) {
+                joinMatch(response.matchId);
+            }
+        });
+    };
+
     const joinMatch = (id) => {
-        console.log(`Joining match ${id}`);
-        navigate('/game');
+        socket.emit('join_match', id, (response) => {
+            if (response.success) {
+                navigate('/game', { state: { matchId: id } });
+            } else {
+                alert(response.error);
+            }
+        });
     };
 
     return (
@@ -45,13 +74,15 @@ const Lobby = () => {
             <div className="lobby-content">
                 <header className="lobby-header">
                     <h2>Active Warzones</h2>
-                    <button className="neon-btn create-btn" onClick={() => setShowCreateModal(true)}>
-                        <Plus size={18} /> Create Match
+                    <button className="neon-btn create-btn" onClick={createMatch}>
+                        <Plus size={18} /> Quick Create Match
                     </button>
                 </header>
 
                 <div className="match-list">
-                    {matches.map((match) => (
+                    {matches.length === 0 ? (
+                        <div style={{ color: '#64748b', textAlign: 'center', width: '100%' }}>No active wars. Start one!</div>
+                    ) : matches.map((match) => (
                         <motion.div
                             key={match.id}
                             className="match-card"
@@ -68,7 +99,7 @@ const Lobby = () => {
                             </div>
                             <button
                                 className="join-btn"
-                                disabled={match.status === 'IN_PROGRESS'} // For now
+                                disabled={match.status === 'IN_PROGRESS'}
                                 onClick={() => joinMatch(match.id)}
                             >
                                 <Play size={16} /> {match.status === 'WAITING' ? 'JOIN' : 'SPECTATE'}

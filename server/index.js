@@ -2,69 +2,67 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
+const jwt = require('jsonwebtoken');
+const { router: authRouter, SECRET_KEY } = require('./auth');
+const LobbyManager = require('./LobbyManager');
 
 const app = express();
 app.use(cors());
-app.use(express.json()); // Parsing JSON bodies
+app.use(express.json());
 
-const { router: authRouter } = require('./auth');
 app.use('/api/auth', authRouter);
 
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: "*", // Allow all origins for simplicity
+        origin: "*",
         methods: ["GET", "POST"]
     }
 });
 
-const ROW_SIZE = 30;
-const COL_SIZE = 30;
-const TOTAL_BLOCKS = ROW_SIZE * COL_SIZE;
+const lobbyManager = new LobbyManager(io);
 
-// In-memory state
-// Each block is either null or { color: string }
-const grid = new Array(TOTAL_BLOCKS).fill(null);
+// Socket Middleware for Auth
+io.use((socket, next) => {
+    const token = socket.handshake.auth.token;
+    if (!token) return next(new Error('Authentication error'));
 
-// Helper to generate random neon color
-const getRandomColor = () => {
-    const neonColors = [
-        '#ff00ff', // Magenta
-        '#00ffff', // Cyan
-        '#00ff00', // Lime
-        '#ffff00', // Yellow
-        '#ff0099', // Pink
-        '#9900ff', // Purple
-        '#00ccff', // Sky Blue
-        '#ff9900', // Orange
-        '#ff3333', // Red
-        '#ccff00'  // Chartreuse
-    ];
-    return neonColors[Math.floor(Math.random() * neonColors.length)];
-};
+    jwt.verify(token, SECRET_KEY, (err, decoded) => {
+        if (err) return next(new Error('Authentication error'));
+        socket.user = decoded; // { id, username, color }
+        next();
+    });
+});
 
 io.on('connection', (socket) => {
-    console.log('A user connected:', socket.id);
+    console.log(`User connected: ${socket.user.username} (${socket.id})`);
 
-    // Assign a random color to this user
-    const userColor = getRandomColor();
-    socket.data.color = userColor;
+    // LOBBY EVENTS
+    socket.on('join_lobby', () => {
+        socket.join('lobby');
+        // Send immediate update
+        socket.emit('lobby_update', lobbyManager.getPublicMatches());
+    });
 
-    // Send current state to the new user
-    socket.emit('init', grid, userColor);
+    socket.on('create_match', ({ name, config }, callback) => {
+        const match = lobbyManager.createMatch(socket.user.id, name, config);
+        callback({ success: true, matchId: match.id });
+    });
 
-    socket.on('capture', (index) => {
-        if (index >= 0 && index < TOTAL_BLOCKS) {
-            // Update grid state
-            grid[index] = { color: socket.data.color };
-
-            // Broadcast update to EVERYONE (including sender)
-            io.emit('update', { index, color: socket.data.color });
+    socket.on('join_match', (matchId, callback) => {
+        const result = lobbyManager.joinMatch(matchId, socket.user.id);
+        if (result.error) {
+            callback({ error: result.error });
+        } else {
+            socket.join(`match:${matchId}`);
+            callback({ success: true, match: result.match });
         }
     });
 
     socket.on('disconnect', () => {
-        console.log('User disconnected:', socket.id);
+        console.log(`User disconnected: ${socket.user.username}`);
+        // Cleanup logic: remove player from matches if needed
+        // For now, minimal cleanup in LobbyManager (could be improved)
     });
 });
 
