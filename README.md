@@ -1,66 +1,66 @@
-# Tiles.io - Real-Time Block Capture App
+# Territory Wars
 
-A playful, real-time web application where users compete to capture blocks on a shared grid. Built with **React**, **Node.js**, and **Socket.io**.
+A real-time multiplayer strategy game where players compete to capture territory, manage energy, and dominate the map.
 
 ## Features
-- **Real-Time Multiplayer**: See updates instantly as other users capture blocks.
-- **Interactive Grid**: 30x30 grid of captureable tiles.
-- **Neon UI**: Sleek dark mode design with vibrant neon colors.
-- **In-Memory State**: Fast, low-latency state management for high-frequency interaction.
+- **Real-time Multiplayer**: Built with Socket.io for instant updates.
+- **Strategy**: Manage energy, capture strategic zones, and lock down areas.
+- **Lobby System**: Create and join custom matches.
+- **Persistent Stats**: Track your wins and score (SQLite).
+- **Neon Aesthetic**: Cyberpunk-inspired visual design.
 
 ## Tech Stack
-- **Frontend**: React, Vite, Vanilla CSS (CSS Grid + Variables)
-- **Backend**: Node.js, Express, Socket.io
-- **Communication**: WebSockets (via Socket.io)
+- **Frontend**: React, Vite, Framer Motion, CSS Variables.
+- **Backend**: Node.js, Express, Socket.io, SQLite.
+- **Auth**: JWT, bcrypt.
 
 ## Getting Started
 
 ### Prerequisites
-- Node.js (v14+ recommended)
-- npm
+- Node.js (v14+)
+- NPM
 
 ### Installation
 
-1.  **Install Backend Dependencies**
-    ```bash
-    npm install
-    ```
+1. **Clone the repo** (if applicable)
+2. **Install Dependencies**:
+   ```bash
+   # Root
+   npm install
 
-2.  **Install Frontend Dependencies**
-    ```bash
-    cd client
-    npm install
-    ```
+   # Client
+   cd client
+   npm install
 
-### Running the App
+   # Server
+   cd ../server
+   npm install
+   ```
 
-You need to run both the backend server and the frontend development server.
+### Running the Game
 
-1.  **Start the Backend** (Runs on port 3000)
-    ```bash
-    npm start
-    ```
-    *Or for development with auto-restart:* `npm run dev`
+1. **Start the Backend**:
+   ```bash
+   cd server
+   npm run dev
+   ```
+   Server runs on `http://localhost:3000`.
 
-2.  **Start the Frontend** (Runs on port 5173)
-    Open a new terminal:
-    ```bash
-    cd client
-    npm run dev
-    ```
+2. **Start the Frontend**:
+   ```bash
+   cd client
+   npm run dev
+   ```
+   Client runs on `http://localhost:5173`.
 
-3.  **Play!**
-    Open [http://localhost:5173](http://localhost:5173) in your browser.
-    Open it in multiple tabs/windows to test real-time syncing!
+3. **Play**:
+   - Open the client URL.
+   - Sign up / Login.
+   - Create a match in the Lobby.
+   - Share the URL or open another tab to join as a different user.
 
-## Project Structure
-- **/server**: Backend logic (in `index.js`).
-- **/client**: Frontend React application.
-- **package.json**: Root scripts for backend.
-
-## How It Works
-- The grid state (900 blocks) is stored in the server's memory.
-- When a user connects, they receive the current grid and a random neon color.
-- Clicking a block emits a `capture` event to the server.
-- The server updates the state and broadcasts an `update` event to **all** connected clients.
-- React components optimally re-render to show the new state instantly.
+## Game Rules
+- **Capture**: Click a grey or enemy tile to capture it (Costs 10 Energy).
+- **Energy**: Regenerates over time.
+- **Locking**: Captured tiles are locked for 3 seconds.
+- **Winning**: Control 80% of the map OR have the highest score after 5 minutes.

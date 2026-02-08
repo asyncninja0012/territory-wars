@@ -55,7 +55,23 @@ io.on('connection', (socket) => {
             callback({ error: result.error });
         } else {
             socket.join(`match:${matchId}`);
-            callback({ success: true, match: result.match });
+
+            // Get Room and Player State
+            const room = lobbyManager.getRoom(matchId);
+            if (room) {
+                const initialState = room.addPlayer(socket.user);
+                callback({ success: true, match: result.match, state: initialState });
+            } else {
+                callback({ error: 'Game room not active' });
+            }
+        }
+    });
+
+    // GAME EVENTS
+    socket.on('capture', ({ matchId, index }) => {
+        const room = lobbyManager.getRoom(matchId);
+        if (room) {
+            room.handleCapture(socket.user.id, index);
         }
     });
 
