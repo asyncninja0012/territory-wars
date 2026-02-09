@@ -1,92 +1,86 @@
-import React, { useState, useRef } from 'react';
-import { Lock } from 'lucide-react';
+import React from 'react';
+import { Lock, Zap, Shield, Bomb, Database } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-const Grid = ({ grid, onBlockClick, zoneDominance = {}, userId }) => {
-  const [capturing, setCapturing] = useState(null); // { index, progress }
-  const captureTimeout = useRef(null);
-
-  const handleMouseDown = (index) => {
-    // Check if captureable (not locked)
-    const cell = grid[index];
-    if (cell && cell.lockedUntil > Date.now()) return;
-
-    // Check Bonus
-    const isDominated = zoneDominance[cell.zoneId] === userId;
-    const CAPTURE_TIME = isDominated ? 400 : 800; // Fast Capture Bonus
-
-    setCapturing({ index, duration: CAPTURE_TIME, startTime: Date.now() });
-
-    // Trigger capture after delay
-    captureTimeout.current = setTimeout(() => {
-      onBlockClick(index); // Trigger actual capture
-      setCapturing(null);
-    }, CAPTURE_TIME);
-  };
-
-  const cancelCapture = () => {
-    if (captureTimeout.current) {
-      clearTimeout(captureTimeout.current);
-      captureTimeout.current = null;
+const Grid = ({ grid, onBlockDown, onBlockUp, activeCaptures = {}, players = [], zoneDominance = {}, userId }) => {
+  // Helper to get Icon based on type
+  const getIcon = (type) => {
+    switch (type) {
+      case 'ENERGY': return <Zap size={14} color="#FFD700" />;
+      case 'FORTRESS': return <Shield size={14} color="#00BFFF" />;
+      case 'BOMB': return <Bomb size={14} color="#FF4500" />;
+      case 'DATA': return <Database size={14} color="#32CD32" />;
+      default: return null;
     }
-    setCapturing(null);
   };
 
   return (
     <div className="grid-container">
       {grid.map((cell, index) => {
-        // cell might be null or { ownerId, color, lockedUntil, zoneId }
-        const isOwned = cell && cell.color;
+        const isOwned = cell && cell.ownerId;
+        const owner = isOwned ? players.find(p => p.id === cell.ownerId) : null;
+        const color = owner ? owner.color : (cell?.color || null);
         const isLocked = cell && cell.lockedUntil > Date.now();
-        const isCapturing = capturing?.index === index;
 
-        // Zone visual: check if bottom/right border needed (every 10th col/row)
+        // Active Capture Info
+        const captureInfo = activeCaptures[index];
+        const isBeingCaptured = !!captureInfo;
+        const capturer = isBeingCaptured ? players.find(p => p.id === captureInfo.playerId) : null;
+        const capturerColor = capturer ? capturer.color : 'white';
+
+        // Zone Visuals
         const row = Math.floor(index / 30);
         const col = index % 30;
         const isZoneBorderRight = (col + 1) % 10 === 0 && (col + 1) !== 30;
         const isZoneBorderBottom = (row + 1) % 10 === 0 && (row + 1) !== 30;
 
+        // Dominance Visuals
+        const isDominated = cell && zoneDominance[cell.zoneId] === userId;
+        const dominationColor = isDominated ? 'gold' : (zoneDominance[cell?.zoneId] ? 'rgba(255,0,0,0.3)' : null);
+
         const style = {
-          ...(isOwned ? {
-            backgroundColor: cell.color,
-            boxShadow: `0 0 10px ${cell.color}`,
-            opacity: isLocked ? 0.6 : 1
-          } : {}),
-          borderRight: isZoneBorderRight ? '2px solid rgba(255,255,255,0.1)' : undefined,
-          borderBottom: isZoneBorderBottom ? '2px solid rgba(255,255,255,0.1)' : undefined,
-          // Zone Dominance Borders
-          border: zoneDominance[cell.zoneId] === userId
-            ? '2px solid gold'
-            : zoneDominance[cell.zoneId]
-              ? '1px solid rgba(255, 0, 0, 0.5)'
-              : undefined
+          backgroundColor: color || 'rgba(255, 255, 255, 0.05)',
+          boxShadow: color ? `0 0 8px ${color}` : (dominationColor ? `inset 0 0 0 2px ${dominationColor}` : 'none'),
+          opacity: isLocked ? 0.6 : 1,
+          borderRight: isZoneBorderRight ? '2px solid rgba(255, 255, 255, 0.3)' : '1px solid rgba(255, 255, 255, 0.05)',
+          borderBottom: isZoneBorderBottom ? '2px solid rgba(255, 255, 255, 0.3)' : '1px solid rgba(255, 255, 255, 0.05)',
         };
 
         return (
           <div
             key={index}
-            className={`block ${isOwned ? 'owned' : ''} ${isLocked ? 'locked' : ''}`}
+            className={`block`}
             style={style}
-            onMouseDown={() => handleMouseDown(index)}
-            onMouseUp={cancelCapture}
-            onMouseLeave={cancelCapture}
-            // For mobile compatibility, maybe onTouchStart/End too
-            onTouchStart={() => handleMouseDown(index)}
-            onTouchEnd={cancelCapture}
+            onMouseDown={() => onBlockDown && onBlockDown(index)}
+            onMouseUp={() => onBlockUp && onBlockUp(index)}
+            onMouseLeave={() => onBlockUp && onBlockUp(index)}
+            onTouchStart={() => onBlockDown && onBlockDown(index)}
+            onTouchEnd={() => onBlockUp && onBlockUp(index)}
           >
-            {isCapturing && (
+            {/* Special Tile Icon */}
+            {cell && cell.type !== 'NORMAL' && !isOwned && (
+              <div className="special-icon" style={{ pointerEvents: 'none' }}>
+                {getIcon(cell.type)}
+              </div>
+            )}
+
+            {/* Lock Icon */}
+            {isLocked && (
+              <div className="lock-icon">
+                <Lock size={12} color="white" />
+              </div>
+            )}
+
+            {/* Capture Progress Ring */}
+            {isBeingCaptured && (
               <div className="capture-overlay">
                 <motion.div
                   className="capture-ring"
                   initial={{ scale: 0, opacity: 1 }}
                   animate={{ scale: 1.5, opacity: 0 }}
-                  transition={{ duration: (capturing.duration || 800) / 1000, ease: "easeOut" }}
+                  transition={{ duration: captureInfo.duration / 1000, ease: "linear" }}
+                  style={{ border: `3px solid ${capturerColor}` }}
                 />
-              </div>
-            )}
-            {isLocked && (
-              <div className="lock-icon">
-                <Lock size={12} color="white" />
               </div>
             )}
           </div>
