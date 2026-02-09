@@ -34,6 +34,13 @@ class LobbyManager {
         // Or just let them join a running game
         if (match.status === 'FINISHED') return { error: 'Match finished' };
 
+        // Check for graceful deletion timeout
+        if (match.deletionTimeout) {
+            console.log(`Match ${matchId} saved from deletion!`);
+            clearTimeout(match.deletionTimeout);
+            match.deletionTimeout = null;
+        }
+
         if (!match.players.has(userId)) {
             if (match.players.size >= match.maxPlayers) return { error: 'Match full' };
             match.players.add(userId);
@@ -65,12 +72,21 @@ class LobbyManager {
 
         match.players.delete(userId);
         if (match.players.size === 0) {
-            this.matches.delete(matchId); // Delete empty match
-            // Also delete the game room if it exists
-            if (this.rooms.has(matchId)) {
-                this.rooms.get(matchId).endGame(); // Clean up game room resources
-                this.rooms.delete(matchId);
-            }
+            // Grace period: Wait 10 seconds before deleting empty match
+            // This allows host to refresh or reconnect without losing the match immediately
+            console.log(`Match ${matchId} is empty. Scheduling deletion in 10s...`);
+
+            match.deletionTimeout = setTimeout(() => {
+                if (this.matches.has(matchId) && this.matches.get(matchId).players.size === 0) {
+                    console.log(`Deleting empty match ${matchId}`);
+                    this.matches.delete(matchId);
+                    if (this.rooms.has(matchId)) {
+                        this.rooms.get(matchId).endGame();
+                        this.rooms.delete(matchId);
+                    }
+                    this.broadcastLobbyUpdate();
+                }
+            }, 10000);
         }
         this.broadcastLobbyUpdate();
     }
