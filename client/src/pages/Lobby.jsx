@@ -8,6 +8,8 @@ import io from 'socket.io-client';
 // We need a persistent socket connection for the lobby
 let socket;
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
 const Lobby = () => {
     const { user, token, logout } = useAuth();
     const navigate = useNavigate();
@@ -15,7 +17,7 @@ const Lobby = () => {
 
     useEffect(() => {
         // Initialize socket with Auth Token
-        socket = io('http://localhost:3000', {
+        socket = io(API_URL, {
             auth: { token }
         });
 
