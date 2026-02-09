@@ -205,8 +205,14 @@ const Game = () => {
 
       <Grid
         grid={grid}
-        onBlockDown={(index) => socket.emit('start_capture', { matchId, index })}
-        onBlockUp={(index) => socket.emit('cancel_capture', { matchId, index })}
+        onBlockDown={(index) => {
+          console.log(`Attempting capture at index ${index}`);
+          socket.emit('start_capture', { matchId, index });
+        }}
+        onBlockUp={(index) => {
+          console.log(`Cancelling capture at index ${index}`);
+          socket.emit('cancel_capture', { matchId, index });
+        }}
         activeCaptures={activeCaptures}
         players={players}
         zoneDominance={zoneDominance}
