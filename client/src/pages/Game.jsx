@@ -8,6 +8,7 @@ import { soundManager } from '../SoundManager';
 
 // Socket singleton or context would be better, but reusing global for now
 // In real app, pass socket from App or Context
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 let socket;
 
 const Game = () => {
@@ -47,7 +48,7 @@ const Game = () => {
       return;
     }
 
-    socket = io('http://localhost:3000', {
+    socket = io(API_URL, {
       auth: { token }
     });
 
