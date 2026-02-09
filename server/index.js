@@ -35,23 +35,27 @@ io.use((socket, next) => {
 });
 
 io.on('connection', (socket) => {
-    console.log(`User connected: ${socket.user.username} (${socket.id})`);
+    console.log(`[SOCKET] User connected: ${socket.user.username} (${socket.id})`);
 
     // LOBBY EVENTS
     socket.on('join_lobby', () => {
+        console.log(`[SOCKET] User ${socket.user.username} joined lobby`);
         socket.join('lobby');
         // Send immediate update
         socket.emit('lobby_update', lobbyManager.getPublicMatches());
     });
 
     socket.on('create_match', ({ name, config }, callback) => {
+        console.log(`[SOCKET] User ${socket.user.username} creating match`);
         const match = lobbyManager.createMatch(socket.user.id, name, config);
         callback({ success: true, matchId: match.id });
     });
 
     socket.on('join_match', (matchId, callback) => {
+        console.log(`[SOCKET] User ${socket.user.username} joining match ${matchId}`);
         const result = lobbyManager.joinMatch(matchId, socket.user.id);
         if (result.error) {
+            console.error(`[SOCKET] Join failed for ${matchId}: ${result.error}`);
             callback({ error: result.error });
         } else {
             socket.join(`match:${matchId}`);
@@ -67,8 +71,6 @@ io.on('connection', (socket) => {
             }
         }
     });
-
-
 
     // GAME EVENTS
     socket.on('start_capture', ({ matchId, index }) => {
@@ -95,7 +97,7 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         const username = socket.user ? socket.user.username : 'Unknown';
-        console.log(`User disconnected: ${username}`);
+        console.log(`[SOCKET] User disconnected: ${username} (${socket.id}). Match: ${socket.currentMatchId}`);
         if (socket.currentMatchId && socket.user) {
             lobbyManager.leaveMatch(socket.currentMatchId, socket.user.id);
         }
