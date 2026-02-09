@@ -10,6 +10,7 @@ class LobbyManager {
 
     createMatch(hostId, name, config) {
         const matchId = uuidv4();
+        console.log(`[LOBBY] Creating Match ${matchId} for Host ${hostId}`);
         const match = {
             id: matchId,
             name: name || `Warzone ${matchId.slice(0, 4)}`,
@@ -27,8 +28,12 @@ class LobbyManager {
     }
 
     joinMatch(matchId, userId) {
+        console.log(`[LOBBY] Player ${userId} attempting to join Match ${matchId}`);
         const match = this.matches.get(matchId);
-        if (!match) return { error: 'Match not found' };
+        if (!match) {
+            console.error(`[LOBBY] Match ${matchId} NOT FOUND. Available matches:`, Array.from(this.matches.keys()));
+            return { error: 'Match not found' };
+        }
 
         // For simplicity, auto-start if 2 players join (or check min players)
         // Or just let them join a running game
@@ -36,7 +41,7 @@ class LobbyManager {
 
         // Check for graceful deletion timeout
         if (match.deletionTimeout) {
-            console.log(`Match ${matchId} saved from deletion!`);
+            console.log(`[LOBBY] Match ${matchId} saved from deletion!`);
             clearTimeout(match.deletionTimeout);
             match.deletionTimeout = null;
         }
@@ -50,6 +55,7 @@ class LobbyManager {
         // Initialize Room if not exists
         let room = this.rooms.get(matchId);
         if (!room) {
+            console.log(`[LOBBY] Initializing GameRoom for ${matchId}`);
             room = new GameRoom(this.io, matchId, { ...match });
             this.rooms.set(matchId, room);
             room.startGame();
