@@ -42,19 +42,15 @@ const Lobby = () => {
         const matchName = `${user.username}'s War`;
         socket.emit('create_match', { name: matchName, config: { maxPlayers: 10 } }, (response) => {
             if (response.success) {
-                joinMatch(response.matchId);
+                // Just navigate, let Game.jsx handle the joining via socket
+                navigate('/game', { state: { matchId: response.matchId } });
             }
         });
     };
 
     const joinMatch = (id) => {
-        socket.emit('join_match', id, (response) => {
-            if (response.success) {
-                navigate('/game', { state: { matchId: id } });
-            } else {
-                alert(response.error);
-            }
-        });
+        // Just navigate, let Game.jsx handle the joining via socket
+        navigate('/game', { state: { matchId: id } });
     };
 
     return (
@@ -99,10 +95,9 @@ const Lobby = () => {
                             </div>
                             <button
                                 className="join-btn"
-                                disabled={match.status === 'IN_PROGRESS'}
                                 onClick={() => joinMatch(match.id)}
                             >
-                                <Play size={16} /> {match.status === 'WAITING' ? 'JOIN' : 'SPECTATE'}
+                                <Play size={16} /> {match.status === 'WAITING' ? 'JOIN' : 'JOIN LIVE'}
                             </button>
                         </motion.div>
                     ))}

@@ -20,9 +20,11 @@ const Game = () => {
   const [gameOver, setGameOver] = useState(null); // { winner, leaderboard, reason }
   const [timeLeft, setTimeLeft] = useState(300); // 5 mins in seconds
   const [players, setPlayers] = useState([]);
+  const [activeCaptures, setActiveCaptures] = useState({}); // index -> { playerId, duration, startTime }
   const [myState, setMyState] = useState({ energy: 0, score: 0 });
   const [isConnected, setIsConnected] = useState(false);
   const [eventMessage, setEventMessage] = useState(null);
+  const [zoneDominance, setZoneDominance] = useState({});
 
   useEffect(() => {
     if (eventMessage) {
@@ -51,6 +53,7 @@ const Game = () => {
 
     socket.on('connect', () => {
       console.log('Connected to Game Socket');
+
       socket.emit('join_match', matchId, (response) => {
         if (response.success) {
           setIsConnected(true);
@@ -73,13 +76,23 @@ const Game = () => {
     });
 
     socket.on('game_update', (update) => {
-      if (update.type === 'capture') {
-        if (update.index !== -1) {
+      if (update.type === 'capture_complete') { // Renamed from capture
+        if (update.grid) {
+          setGrid(update.grid); // Full Grid Sync (Bomb)
+        } else if (update.index !== -1) {
           setGrid(prev => {
             const next = [...prev];
             next[update.index] = update.tile;
             return next;
           });
+        }
+
+        if (update.effect) {
+          // Show small toast? For now just log or sound
+          console.log(update.effect);
+          if (update.effect.includes('BOMB')) soundManager.playError(); // Boom sound?
+          else soundManager.playCapture();
+        } else {
           soundManager.playCapture();
         }
 
@@ -91,6 +104,19 @@ const Game = () => {
         if (update.playerId === user.id) {
           setMyState(prev => ({ ...prev, energy: update.newEnergy, score: update.newScore }));
         }
+
+      } else if (update.type === 'capture_started') {
+        // We'll pass this via a new state or direct event bus to Grid
+        // For efficiency, maybe just update a "activeCaptures" state map?
+        setActiveCaptures(prev => ({ ...prev, [update.index]: { playerId: update.playerId, duration: update.duration, startTime: Date.now() } }));
+
+      } else if (update.type === 'capture_canceled' || update.type === 'capture_interrupted') {
+        setActiveCaptures(prev => {
+          const next = { ...prev };
+          delete next[update.index];
+          return next;
+        });
+        if (update.type === 'capture_interrupted') soundManager.playError(); // Use error sound for interrupt
 
       } else if (update.type === 'energy_regen') {
         // Bulk update players
@@ -106,6 +132,8 @@ const Game = () => {
         }
       } else if (update.type === 'full_grid') {
         setGrid(update.grid);
+      } else if (update.type === 'zone_update') {
+        setZoneDominance(update.zones);
       }
     });
 
@@ -124,18 +152,6 @@ const Game = () => {
     };
   }, [matchId, token]);
 
-  const handleBlockClick = (index) => {
-    if (!isConnected || gameOver) return;
-    if (myState.energy < 10) {
-      soundManager.playError();
-      return;
-    }
-
-    // Optimistic Update (Visual only)
-    // Actually, let's wait for server for "Territory Wars" to ensure no cheating illusion
-    socket.emit('capture', { matchId, index });
-  };
-
   const formatTime = (seconds) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -152,6 +168,7 @@ const Game = () => {
           <p>{eventMessage}</p>
         </div>
       )}
+
       {gameOver && (
         <div className="game-over-overlay">
           <div className="game-over-card">
@@ -185,7 +202,15 @@ const Game = () => {
         Retreat
       </button>
 
-      <Grid grid={grid} onBlockClick={handleBlockClick} />
+      <Grid
+        grid={grid}
+        onBlockDown={(index) => socket.emit('start_capture', { matchId, index })}
+        onBlockUp={(index) => socket.emit('cancel_capture', { matchId, index })}
+        activeCaptures={activeCaptures}
+        players={players}
+        zoneDominance={zoneDominance}
+        userId={user?.id}
+      />
     </div>
   );
 };

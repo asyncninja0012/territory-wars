@@ -1,0 +1,35 @@
+# Standard Node.js ignores
+node_modules/
+.env
+dist/
+build/
+.DS_Store
+
+# Ignore all markdown files by default
+*.md
+
+# Exception: Keep these specific documentation files
+!README.md
+!GAME_RULES.md
+
+# Client Specific Ignores (Consolidated)
+client/logs
+client/*.log
+client/npm-debug.log*
+client/yarn-debug.log*
+client/yarn-error.log*
+client/pnpm-debug.log*
+client/lerna-debug.log*
+client/node_modules
+client/dist
+client/dist-ssr
+client/*.local
+client/.vscode/*
+client/!.vscode/extensions.json
+client/.idea
+client/.DS_Store
+client/*.suo
+client/*.ntvs*
+client/*.njsproj
+client/*.sln
+client/*.sw?

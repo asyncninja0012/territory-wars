@@ -2,17 +2,20 @@ import React, { useState, useRef } from 'react';
 import { Lock } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-const Grid = ({ grid, onBlockClick }) => {
+const Grid = ({ grid, onBlockClick, zoneDominance = {}, userId }) => {
   const [capturing, setCapturing] = useState(null); // { index, progress }
   const captureTimeout = useRef(null);
-  const CAPTURE_TIME = 800; // ms to hold
 
   const handleMouseDown = (index) => {
     // Check if captureable (not locked)
     const cell = grid[index];
     if (cell && cell.lockedUntil > Date.now()) return;
 
-    setCapturing({ index });
+    // Check Bonus
+    const isDominated = zoneDominance[cell.zoneId] === userId;
+    const CAPTURE_TIME = isDominated ? 400 : 800; // Fast Capture Bonus
+
+    setCapturing({ index, duration: CAPTURE_TIME, startTime: Date.now() });
 
     // Trigger capture after delay
     captureTimeout.current = setTimeout(() => {
@@ -50,7 +53,13 @@ const Grid = ({ grid, onBlockClick }) => {
             opacity: isLocked ? 0.6 : 1
           } : {}),
           borderRight: isZoneBorderRight ? '2px solid rgba(255,255,255,0.1)' : undefined,
-          borderBottom: isZoneBorderBottom ? '2px solid rgba(255,255,255,0.1)' : undefined
+          borderBottom: isZoneBorderBottom ? '2px solid rgba(255,255,255,0.1)' : undefined,
+          // Zone Dominance Borders
+          border: zoneDominance[cell.zoneId] === userId
+            ? '2px solid gold'
+            : zoneDominance[cell.zoneId]
+              ? '1px solid rgba(255, 0, 0, 0.5)'
+              : undefined
         };
 
         return (
@@ -71,7 +80,7 @@ const Grid = ({ grid, onBlockClick }) => {
                   className="capture-ring"
                   initial={{ scale: 0, opacity: 1 }}
                   animate={{ scale: 1.5, opacity: 0 }}
-                  transition={{ duration: CAPTURE_TIME / 1000, ease: "easeOut" }}
+                  transition={{ duration: (capturing.duration || 800) / 1000, ease: "easeOut" }}
                 />
               </div>
             )}

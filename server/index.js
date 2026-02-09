@@ -55,6 +55,7 @@ io.on('connection', (socket) => {
             callback({ error: result.error });
         } else {
             socket.join(`match:${matchId}`);
+            socket.currentMatchId = matchId; // Track match for disconnect
 
             // Get Room and Player State
             const room = lobbyManager.getRoom(matchId);
@@ -67,18 +68,37 @@ io.on('connection', (socket) => {
         }
     });
 
+
+
     // GAME EVENTS
-    socket.on('capture', ({ matchId, index }) => {
-        const room = lobbyManager.getRoom(matchId);
-        if (room) {
-            room.handleCapture(socket.user.id, index);
+    socket.on('start_capture', ({ matchId, index }) => {
+        try {
+            const room = lobbyManager.getRoom(matchId);
+            if (room && socket.user) {
+                room.handleStartCapture(socket.user.id, index);
+            }
+        } catch (error) {
+            console.error('Start Capture error:', error);
+        }
+    });
+
+    socket.on('cancel_capture', ({ matchId, index }) => {
+        try {
+            const room = lobbyManager.getRoom(matchId);
+            if (room && socket.user) {
+                room.handleCancelCapture(socket.user.id, index);
+            }
+        } catch (error) {
+            console.error('Cancel Capture error:', error);
         }
     });
 
     socket.on('disconnect', () => {
-        console.log(`User disconnected: ${socket.user.username}`);
-        // Cleanup logic: remove player from matches if needed
-        // For now, minimal cleanup in LobbyManager (could be improved)
+        const username = socket.user ? socket.user.username : 'Unknown';
+        console.log(`User disconnected: ${username}`);
+        if (socket.currentMatchId && socket.user) {
+            lobbyManager.leaveMatch(socket.currentMatchId, socket.user.id);
+        }
     });
 });
 

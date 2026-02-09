@@ -1,66 +1,107 @@
-# Territory Wars
+# Territory Wars: Cyberpunk Expansion
 
-A real-time multiplayer strategy game where players compete to capture territory, manage energy, and dominate the map.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js](https://img.shields.io/badge/Node.js-v14+-green.svg)](https://nodejs.org/)
 
-## Features
-- **Real-time Multiplayer**: Built with Socket.io for instant updates.
-- **Strategy**: Manage energy, capture strategic zones, and lock down areas.
-- **Lobby System**: Create and join custom matches.
-- **Persistent Stats**: Track your wins and score (SQLite).
-- **Neon Aesthetic**: Cyberpunk-inspired visual design.
+A real-time, browser-based multiplayer strategy game where players compete to capture territory, manage energy, and dominate the map in a neon-soaked, persistent battlefield.
 
-## Tech Stack
-- **Frontend**: React, Vite, Framer Motion, CSS Variables.
-- **Backend**: Node.js, Express, Socket.io, SQLite.
-- **Auth**: JWT, bcrypt.
+## 🎮 How to Play
 
-## Getting Started
+**[📖 READ THE OFFICIAL GAME RULES HERE](./GAME_RULES.md)**
+
+1.  **Join the Lobby**: Create a new match or join an existing one.
+2.  **Capture Territory**: Click and **HOLD** on a tile to capture it.
+    *   **Interrupt**: See an enemy capturing? Click their tile to interrupt them!
+3.  **Manage Energy**: Every action costs energy. Don't run dry in the middle of a battle!
+4.  **Dominate Zones**: Control >75% of a zone to unlock **Super Speed Capture** and **Stronger Defenses**.
+5.  **Watch for Events**: Random World Events (Energy Surges, Hacks) trigger every 45 seconds.
+
+---
+
+## 🚀 Installation & Setup
+
+Follow these instructions to run the game locally on your machine.
 
 ### Prerequisites
-- Node.js (v14+)
-- NPM
+*   Node.js (v16 or higher recommended)
+*   npm or yarn
 
-### Installation
+### 1. Clone the Repository
+```bash
+git clone https://github.com/yourusername/territory-wars.git
+cd territory-wars
+```
 
-1. **Clone the repo** (if applicable)
-2. **Install Dependencies**:
-   ```bash
-   # Root
-   npm install
+### 2. Install Dependencies
+You need to install dependencies for both the **Client** (Frontend) and **Server** (Backend).
 
-   # Client
-   cd client
-   npm install
+**Server:**
+```bash
+cd server
+npm install
+```
 
-   # Server
-   cd ../server
-   npm install
-   ```
+**Client:**
+```bash
+cd ../client
+npm install
+```
 
-### Running the Game
+### 3. Start the Game
+Open two separate terminal windows.
 
-1. **Start the Backend**:
-   ```bash
-   cd server
-   npm run dev
-   ```
-   Server runs on `http://localhost:3000`.
+**Terminal 1 (Server):**
+```bash
+cd server
+npm run dev
+# Server runs on http://localhost:3000
+```
 
-2. **Start the Frontend**:
-   ```bash
-   cd client
-   npm run dev
-   ```
-   Client runs on `http://localhost:5173`.
+**Terminal 2 (Client):**
+```bash
+cd client
+npm run dev
+# Client runs on http://localhost:5173
+```
 
-3. **Play**:
-   - Open the client URL.
-   - Sign up / Login.
-   - Create a match in the Lobby.
-   - Share the URL or open another tab to join as a different user.
+### 4. Play!
+Open your browser and navigate to `http://localhost:5173`.
+*   **Tip**: Open the game in multiple tabs (or Incognito mode) to test multiplayer features by yourself!
 
-## Game Rules
-- **Capture**: Click a grey or enemy tile to capture it (Costs 10 Energy).
-- **Energy**: Regenerates over time.
-- **Locking**: Captured tiles are locked for 3 seconds.
-- **Winning**: Control 80% of the map OR have the highest score after 5 minutes.
+---
+
+## 🛠 Tech Stack & Architecture
+
+Territory Wars is built using a modern JavaScript stack, designed for real-time performance.
+
+### **Frontend (Client)**
+*   **React**: UI Component library.
+*   **Vite**: Next-gen frontend tooling for instant dev server start.
+*   **Socket.io-client**: Real-time bidirectional communication with the game server.
+*   **Framer Motion**: Smooth, physics-based animations for UI and Grid interactions.
+*   **React Router**: Single-page application routing.
+*   **Lucide React**: Beautiful, consistent iconography.
+
+### **Backend (Server)**
+*   **Node.js & Express**: API and static file serving.
+*   **Socket.io**: The core engine. Handles the "Tick Loop" (10 ticks/sec), broadcasting game state, and processing player inputs.
+*   **SQLite**: Lightweight, file-based database for persisting User Accounts, Match Limits, and High Scores.
+*   **JWT (JSON Web Tokens)**: Secure, stateless user authentication.
+
+### **How it Works (The "Game Loop")**
+1.  **State is Authoritative**: The Server holds the "True" state of the Grid (owners, locks, energy).
+2.  **Tick System**: Every 100ms, the server runs a `tick()` function:
+    *   Checks active captures (did a player hold long enough?).
+    *   Regenerates player energy.
+    *   Calculates Zone Dominance.
+    *   Checks for Win Conditions.
+3.  **Broadcast**: Relevant updates (not the whole grid every time!) are sent to clients via WebSockets (`game_update` events).
+4.  **Optimistic UI**: The client visualizes actions immediately (like the capture ring), but the actual result depends on the server confirmation.
+
+---
+
+## 🤝 Contributing
+Feel free to fork this project and submit Pull Requests!
+
+## 📄 License
+This project is open source and available under the [MIT License](LICENSE).

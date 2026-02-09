@@ -14,6 +14,9 @@ class GameRoom {
         // Player State: userId -> { energy, color, score }
         this.players = new Map();
 
+        // Active Captures: tileIndex -> { playerId, startTime, duration }
+        this.activeCaptures = new Map();
+
         // Game Loop
         this.intervalId = null;
         this.TICK_RATE = 10; // 10 ticks per second (100ms)
@@ -23,6 +26,9 @@ class GameRoom {
     initializeGrid() {
         const grid = new Array(this.totalBlocks).fill(null);
         // Simple 3x3 Zones (Total 9 zones for 30x30 grid -> each zone 10x10)
+
+        const SPECIAL_TYPES = ['ENERGY', 'FORTRESS', 'BOMB', 'DATA'];
+
         for (let i = 0; i < this.totalBlocks; i++) {
             const row = Math.floor(i / this.cols);
             const col = i % this.cols;
@@ -31,9 +37,16 @@ class GameRoom {
             const zoneCol = Math.floor(col / 10);
             const zoneId = `ZONE_${zoneRow}_${zoneCol}`;
 
+            // 5% Chance for Special Tile
+            let type = 'NORMAL';
+            if (Math.random() < 0.05) {
+                type = SPECIAL_TYPES[Math.floor(Math.random() * SPECIAL_TYPES.length)];
+            }
+
             grid[i] = {
                 id: i,
                 zoneId: zoneId,
+                type: type, // NORMAL, ENERGY, FORTRESS, BOMB, DATA
                 ownerId: null,
                 color: null,
                 lockedUntil: 0
@@ -53,17 +66,37 @@ class GameRoom {
     }
 
     addPlayer(user) {
+        // Unique Color Assignment
+        const NEON_COLORS = [
+            '#FF00FF', '#00FFFF', '#00FF00', '#FFFF00', '#FF0000',
+            '#FF1493', '#00BFFF', '#7CFC00', '#FF4500', '#9400D3',
+            '#FF69B4', '#ADFF2F', '#1E90FF', '#FFD700', '#DC143C'
+        ];
+
+        let color = user.color; // Default fall back
+
         if (!this.players.has(user.id)) {
+            const usedColors = new Set(Array.from(this.players.values()).map(p => p.color));
+            const available = NEON_COLORS.filter(c => !usedColors.has(c));
+
+            if (available.length > 0) {
+                color = available[Math.floor(Math.random() * available.length)];
+            } else {
+                // Determine random if all taken
+                color = NEON_COLORS[Math.floor(Math.random() * NEON_COLORS.length)];
+            }
+
             this.players.set(user.id, {
                 id: user.id,
                 username: user.username,
-                color: user.color,
+                color: color,
                 energy: 100,
                 score: 0,
                 lastRegen: Date.now()
             });
         }
-        // Broadcast full state to this player
+
+        // Broadcast full state
         return {
             grid: this.grid,
             players: Array.from(this.players.values()),
@@ -73,47 +106,96 @@ class GameRoom {
 
     removePlayer(userId) {
         this.players.delete(userId);
-        // If empty, cleanup managed by LobbyManager
+        // Clean up locks owned by this player? Optional.
+        // For now, keep them locked or owned until captured by others?
+        // Let's keep them owned to show "ruins" of a player.
     }
 
-    handleCapture(userId, index) {
+    handleCaptureSuccess(userId, index) {
         const player = this.players.get(userId);
         if (!player) return;
-        if (index < 0 || index >= this.totalBlocks) return;
-        if (player.energy < 10) return; // Cost 10 energy
+        // Re-check energy (in case drained during capture?)
+        if (player.energy < 10) return;
 
         const tile = this.grid[index];
         const now = Date.now();
 
-        // Check Lock
-        if (tile && tile.lockedUntil > now) return;
-
-        // Deduct Energy
+        // 10 Energy Cost
         player.energy -= 10;
 
-        // Capture
-        // Preserve existing properties like zoneId
+        // Check Zone Bonus (Lock Duration)
+        const isDominator = this.zoneDominators && this.zoneDominators[tile.zoneId] === userId;
+        const lockDuration = isDominator ? 10000 : 3000;
+
+        // Apply Special Tile Effects
+        let effectMessage = null;
+        if (tile.type === 'ENERGY') {
+            player.energy = 100;
+            effectMessage = 'ENERGY RESTORED!';
+        } else if (tile.type === 'DATA') {
+            player.score += 5; // Bonus Score
+            effectMessage = 'DATA SECURED (+5)';
+        } else if (tile.type === 'BOMB') {
+            // Bomb Logic: Reset 3x3 grid around center
+            const row = Math.floor(index / this.cols);
+            const col = index % this.cols;
+
+            for (let r = row - 1; r <= row + 1; r++) {
+                for (let c = col - 1; c <= col + 1; c++) {
+                    if (r >= 0 && r < this.rows && c >= 0 && c < this.cols) {
+                        const neighborIdx = r * this.cols + c;
+                        // Don't reset the bomb tile itself immediately (it gets captured below), 
+                        // actually, bomb should probably destroy itself too or stay as captured?
+                        // Let's say bomb explodes and leaves a crater (unowned)
+                        // But for simplicity, let's claim the bomb tile but destroy neighbors.
+                        if (neighborIdx !== index) {
+                            const neighbor = this.grid[neighborIdx];
+                            if (neighbor.lockedUntil < now) { // Only blow up if not locked
+                                this.grid[neighborIdx] = { ...neighbor, ownerId: null, color: null };
+                            }
+                        }
+                    }
+                }
+            }
+            effectMessage = 'BOMB DETONATED!';
+        }
+
         this.grid[index] = {
             ...this.grid[index],
             ownerId: userId,
             color: player.color,
-            lockedUntil: now + 3000, // Lock for 3s
+            lockedUntil: now + lockDuration,
+            type: 'NORMAL' // Consumed after capture? Or persistent? Let's consume it.
         };
         player.score += 1;
 
-        // Broadcast update
+        // Broadcast active capture removal just in case
+        this.activeCaptures.delete(index);
+
         this.io.to(`match:${this.matchId}`).emit('game_update', {
-            type: 'capture',
+            type: 'capture_complete',
             index,
             tile: this.grid[index],
             playerId: userId,
             newEnergy: player.energy,
-            newScore: player.score
+            newScore: player.score,
+            isBonus: isDominator,
+            effect: effectMessage,
+            grid: tile.type === 'BOMB' ? this.grid : undefined // Send full grid if bomb to sync craters
         });
     }
 
     tick() {
         const now = Date.now(); // Corrected typo from `constnow`
+
+        // Check Active Captures
+        for (const [index, capture] of this.activeCaptures.entries()) {
+            if (now - capture.startTime >= capture.duration) {
+                // SUCCESS!
+                this.handleCaptureSuccess(capture.playerId, index);
+                this.activeCaptures.delete(index);
+            }
+        }
 
         // Check Win Condition (e.g., Time Limit or Domination)
         // For MVP: 5 minute timer or 80% map domination
@@ -123,18 +205,9 @@ class GameRoom {
             return;
         }
 
-        // World Events (every 45s approx)
-        if (now % 45000 < 100 && now - this.match.createdAt > 10000) { // Start events after 10s
-            this.triggerRandomEvent();
-        }
-
-        // Domination Check
+        // Zone Dominance Check (every 1s)
         if (now % 1000 < 100) {
-            const totalOwned = this.grid.filter(c => c && c.ownerId).length;
-            if (totalOwned >= this.totalBlocks * 0.8) {
-                this.endGame('DOMINATION');
-                return;
-            }
+            this.updateZoneDominance();
         }
 
         // Energy Regen (every 1s approx)
@@ -142,7 +215,7 @@ class GameRoom {
         for (const player of this.players.values()) {
             if (Date.now() - player.lastRegen > 1000) {
                 if (player.energy < 100) {
-                    player.energy = Math.min(100, player.energy + 5);
+                    player.energy = Math.min(100, player.energy + 3); // Slower Regen (5 -> 3)
                     player.lastRegen = Date.now();
                     dirtyPlayers.push({ id: player.id, energy: player.energy });
                 }
@@ -155,6 +228,39 @@ class GameRoom {
                 players: dirtyPlayers
             });
         }
+    }
+
+    updateZoneDominance() {
+        const zones = {}; // zoneId -> { ownerId: count, total: count }
+
+        // Tally
+        for (const tile of this.grid) {
+            if (!zones[tile.zoneId]) zones[tile.zoneId] = { total: 0, counts: {} };
+            zones[tile.zoneId].total++;
+            if (tile.ownerId) {
+                zones[tile.zoneId].counts[tile.ownerId] = (zones[tile.zoneId].counts[tile.ownerId] || 0) + 1;
+            }
+        }
+
+        // Determine Dominators (>75%)
+        const dominations = {}; // zoneId -> ownerId
+        for (const [zoneId, data] of Object.entries(zones)) {
+            for (const [ownerId, count] of Object.entries(data.counts)) {
+                if (count >= data.total * 0.75) {
+                    dominations[zoneId] = ownerId;
+                }
+            }
+        }
+
+        this.zoneDominators = dominations;
+        // Optional: Broadcast if changed, or just send with gamestate?
+        // Let's send in 'game_update' periodically or on change.
+        // For MVP, send every few seconds or piggback?
+        // Let's emit a specific update 
+        this.io.to(`match:${this.matchId}`).emit('game_update', {
+            type: 'zone_update',
+            zones: dominations
+        });
     }
 
     triggerRandomEvent() {
