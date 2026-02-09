@@ -104,11 +104,72 @@ class GameRoom {
         };
     }
 
-    removePlayer(userId) {
-        this.players.delete(userId);
-        // Clean up locks owned by this player? Optional.
-        // For now, keep them locked or owned until captured by others?
-        // Let's keep them owned to show "ruins" of a player.
+    handleStartCapture(userId, index) {
+        const player = this.players.get(userId);
+        if (!player) return;
+
+        // Check Energy
+        if (player.energy < 10) return; // Client should also check, but server is authority
+
+        // Check if Tile is Locked
+        const tile = this.grid[index];
+        if (tile.lockedUntil > Date.now()) return;
+
+        // Check if already owned by same player (optional: allow re-capture to refresh lock?)
+        // if (tile.ownerId === userId) return; 
+
+        const now = Date.now();
+
+        // Check Existing Capture (Interrupt Logic)
+        if (this.activeCaptures.has(index)) {
+            const currentCapture = this.activeCaptures.get(index);
+            if (currentCapture.playerId !== userId) {
+                // INTERRUPT ENEMY!
+                this.activeCaptures.delete(index);
+                this.io.to(`match:${this.matchId}`).emit('game_update', {
+                    type: 'capture_interrupted',
+                    index,
+                    interrupterId: userId,
+                    victimId: currentCapture.playerId
+                });
+                return;
+            } else {
+                // Already capturing, ignore
+                return;
+            }
+        }
+
+        // Calculate Duration
+        // Base 800ms. Zone Dominator 400ms.
+        const isDominator = this.zoneDominators && this.zoneDominators[tile.zoneId] === userId;
+        const duration = isDominator ? 400 : 800;
+
+        this.activeCaptures.set(index, {
+            playerId: userId,
+            startTime: now,
+            duration
+        });
+
+        this.io.to(`match:${this.matchId}`).emit('game_update', {
+            type: 'capture_started',
+            index,
+            playerId: userId,
+            duration
+        });
+    }
+
+    handleCancelCapture(userId, index) {
+        if (this.activeCaptures.has(index)) {
+            const capture = this.activeCaptures.get(index);
+            if (capture.playerId === userId) {
+                this.activeCaptures.delete(index);
+                this.io.to(`match:${this.matchId}`).emit('game_update', {
+                    type: 'capture_canceled',
+                    index,
+                    playerId: userId
+                });
+            }
+        }
     }
 
     handleCaptureSuccess(userId, index) {
