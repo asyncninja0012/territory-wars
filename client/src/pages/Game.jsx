@@ -4,6 +4,7 @@ import Grid from '../components/Grid';
 import HUD from '../components/HUD'; // Assume HUD is created
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
+import { soundManager } from '../SoundManager';
 
 // Socket singleton or context would be better, but reusing global for now
 // In real app, pass socket from App or Context
@@ -21,6 +22,14 @@ const Game = () => {
   const [players, setPlayers] = useState([]);
   const [myState, setMyState] = useState({ energy: 0, score: 0 });
   const [isConnected, setIsConnected] = useState(false);
+  const [eventMessage, setEventMessage] = useState(null);
+
+  useEffect(() => {
+    if (eventMessage) {
+      const timer = setTimeout(() => setEventMessage(null), 5000); // Dismiss after 5s
+      return () => clearTimeout(timer);
+    }
+  }, [eventMessage]);
 
   useEffect(() => {
     // Timer Countdown
@@ -65,11 +74,14 @@ const Game = () => {
 
     socket.on('game_update', (update) => {
       if (update.type === 'capture') {
-        setGrid(prev => {
-          const next = [...prev];
-          next[update.index] = update.tile;
-          return next;
-        });
+        if (update.index !== -1) {
+          setGrid(prev => {
+            const next = [...prev];
+            next[update.index] = update.tile;
+            return next;
+          });
+          soundManager.playCapture();
+        }
 
         // Update player score
         setPlayers(prev => prev.map(p =>
@@ -85,20 +97,26 @@ const Game = () => {
         const updatesMap = new Map(update.players.map(p => [p.id, p.energy]));
 
         setPlayers(prev => prev.map(p => {
-          if (updatesMap.has(p.id)) {
-            return { ...p, energy: updatesMap.get(p.id) };
-          }
+          if (updatesMap.has(p.id)) return { ...p, energy: updatesMap.get(p.id) };
           return p;
         }));
 
         if (updatesMap.has(user.id)) {
           setMyState(prev => ({ ...prev, energy: updatesMap.get(user.id) }));
         }
+      } else if (update.type === 'full_grid') {
+        setGrid(update.grid);
       }
+    });
+
+    socket.on('game_event', (data) => {
+      setEventMessage(data.message);
+      soundManager.playEvent();
     });
 
     socket.on('game_over', (data) => {
       setGameOver(data);
+      soundManager.playGameOver();
     });
 
     return () => {
@@ -108,7 +126,10 @@ const Game = () => {
 
   const handleBlockClick = (index) => {
     if (!isConnected || gameOver) return;
-    if (myState.energy < 10) return; // Client-side check for responsiveness
+    if (myState.energy < 10) {
+      soundManager.playError();
+      return;
+    }
 
     // Optimistic Update (Visual only)
     // Actually, let's wait for server for "Territory Wars" to ensure no cheating illusion
@@ -125,6 +146,12 @@ const Game = () => {
 
   return (
     <div className="game-wrapper">
+      {eventMessage && (
+        <div className="event-banner">
+          <h3>⚠ WORLD EVENT ⚠</h3>
+          <p>{eventMessage}</p>
+        </div>
+      )}
       {gameOver && (
         <div className="game-over-overlay">
           <div className="game-over-card">

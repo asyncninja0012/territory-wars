@@ -123,6 +123,11 @@ class GameRoom {
             return;
         }
 
+        // World Events (every 45s approx)
+        if (now % 45000 < 100 && now - this.match.createdAt > 10000) { // Start events after 10s
+            this.triggerRandomEvent();
+        }
+
         // Domination Check
         if (now % 1000 < 100) {
             const totalOwned = this.grid.filter(c => c && c.ownerId).length;
@@ -150,6 +155,61 @@ class GameRoom {
                 players: dirtyPlayers
             });
         }
+    }
+
+    triggerRandomEvent() {
+        const events = ['ENERGY_SURGE', 'GRID_BIAS', 'INSTANT_UNLOCK'];
+        const type = events[Math.floor(Math.random() * events.length)];
+
+        let message = '';
+
+        switch (type) {
+            case 'ENERGY_SURGE':
+                message = 'ENERGY SURGE! All players restored to 100% Energy.';
+                for (const player of this.players.values()) {
+                    player.energy = 100;
+                }
+                // Broadcast immediate energy update
+                const allPlayers = Array.from(this.players.values()).map(p => ({ id: p.id, energy: 100 }));
+                this.io.to(`match:${this.matchId}`).emit('game_update', { type: 'energy_regen', players: allPlayers });
+                break;
+
+            case 'GRID_BIAS': // Give random player a boost
+                const playerIds = Array.from(this.players.keys());
+                if (playerIds.length > 0) {
+                    const luckyId = playerIds[Math.floor(Math.random() * playerIds.length)];
+                    const luckyName = this.players.get(luckyId).username;
+                    message = `SYS_ADMIN_HACK: ${luckyName} gained 50 Score!`;
+
+                    const p = this.players.get(luckyId);
+                    p.score += 50;
+
+                    this.io.to(`match:${this.matchId}`).emit('game_update', {
+                        type: 'capture', // Reuse capture update to sync score logic if efficient, but better to have explicit score update
+                        // Actually, let's just emit a generic score update or reuse capture for now with dummy index? 
+                        // Better: emit 'player_update'
+                        playerId: luckyId,
+                        index: -1,
+                        tile: null,
+                        newScore: p.score,
+                        newEnergy: p.energy
+                    });
+                }
+                break;
+
+            case 'INSTANT_UNLOCK':
+                message = 'SECURITY BREACH: All tiles unlocked!';
+                for (let i = 0; i < this.totalBlocks; i++) {
+                    if (this.grid[i]) this.grid[i].lockedUntil = 0;
+                }
+                // Full grid sync needed? Or just notify client to visually unlock?
+                // Sending full grid state is heavy. Let's just send event and client force refresh?
+                // Or update specific tiles? For MVP, let's just emit grid_update
+                this.io.to(`match:${this.matchId}`).emit('game_update', { type: 'full_grid', grid: this.grid });
+                break;
+        }
+
+        this.io.to(`match:${this.matchId}`).emit('game_event', { type, message });
     }
 
     endGame(reason) {
