@@ -46,29 +46,39 @@ io.on('connection', (socket) => {
     });
 
     socket.on('create_match', ({ name, config }, callback) => {
-        console.log(`[SOCKET] User ${socket.user.username} creating match`);
-        const match = lobbyManager.createMatch(socket.user.id, name, config);
-        callback({ success: true, matchId: match.id });
+        try {
+            console.log(`[SOCKET] User ${socket.user.username} creating match`);
+            const match = lobbyManager.createMatch(socket.user.id, name, config);
+            callback({ success: true, matchId: match.id });
+        } catch (error) {
+            console.error('[SOCKET] Create Match Error:', error);
+            callback({ error: 'Failed to create match' });
+        }
     });
 
     socket.on('join_match', (matchId, callback) => {
-        console.log(`[SOCKET] User ${socket.user.username} joining match ${matchId}`);
-        const result = lobbyManager.joinMatch(matchId, socket.user.id);
-        if (result.error) {
-            console.error(`[SOCKET] Join failed for ${matchId}: ${result.error}`);
-            callback({ error: result.error });
-        } else {
-            socket.join(`match:${matchId}`);
-            socket.currentMatchId = matchId; // Track match for disconnect
-
-            // Get Room and Player State
-            const room = lobbyManager.getRoom(matchId);
-            if (room) {
-                const initialState = room.addPlayer(socket.user);
-                callback({ success: true, match: result.match, state: initialState });
+        try {
+            console.log(`[SOCKET] User ${socket.user.username} joining match ${matchId}`);
+            const result = lobbyManager.joinMatch(matchId, socket.user.id);
+            if (result.error) {
+                console.error(`[SOCKET] Join failed for ${matchId}: ${result.error}`);
+                callback({ error: result.error });
             } else {
-                callback({ error: 'Game room not active' });
+                socket.join(`match:${matchId}`);
+                socket.currentMatchId = matchId; // Track match for disconnect
+
+                // Get Room and Player State
+                const room = lobbyManager.getRoom(matchId);
+                if (room) {
+                    const initialState = room.addPlayer(socket.user);
+                    callback({ success: true, match: result.match, state: initialState });
+                } else {
+                    callback({ error: 'Game room not active' });
+                }
             }
+        } catch (error) {
+            console.error('[SOCKET] Join Match Error:', error);
+            callback({ error: 'Internal Server Error during Join' });
         }
     });
 
